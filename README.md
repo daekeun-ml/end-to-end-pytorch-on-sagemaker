@@ -21,13 +21,23 @@
 - Deployment
     - torchserving (daekeun@, choijoon@)
     - eia (choijoon@)
+    - MLOps (wonkec@)
 
 ### Contributor
 - Daekeun Kim (daekeun@amazon.com)
 - Youngjoon Choi (choijoon@amazon.com)
+- Wonkeun Choi (wonkec@amazon.com)
 
 ## Implementation (To be updated soon)
 
 ### [Module 1. EDA and Data Preparation](module1-eda_and_data_split.ipynb)
 
-### [Module 2. Training without Amazon SageMaker](module2-training_with_cutmix.ipynb)
+### [Module 2. Training without Amazon SageMaker](module2-training_local.ipynb)
+
+### [Module 3. Training on Amazon SageMaker](module3-training_on_sagemaker.ipynb)
+
+### Module 4. Multi-GPU Distributed Training on Amazon SageMaker
+
+### Module 5. Deployment
+
+### Module 6. MLOps-Step Function Pipeline
