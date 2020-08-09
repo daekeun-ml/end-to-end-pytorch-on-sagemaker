@@ -45,22 +45,35 @@ def torch_model(model_name, pretrained=True):
     return model
 
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(logits, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
         maxk = max(topk)
         batch_size = target.size(0)
+#         print("batch_size : {}".format(batch_size))
 
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        _, pred1 = logits[:, :168].topk(maxk, 1, True, True)
+        _, pred2 = logits[:, 168:179].topk(maxk, 1, True, True)
+        _, pred3 = logits[:, 179:].topk(maxk, 1, True, True)
 
+#         print("pred1 : {}, pred2 : {}, pred3 : {}".format(pred1 ,pred2, pred3))
+        pred1 = pred1.t()
+        pred2 = pred2.t()
+        pred3 = pred3.t()
+        correct1 = pred1.eq(target[:,0].view(1, -1).expand_as(pred1))
+        correct2 = pred2.eq(target[:,1].view(1, -1).expand_as(pred2))
+        correct3 = pred3.eq(target[:,2].view(1, -1).expand_as(pred3))
+#         print("correct1 : {}, correct2 : {}, correct3 : {}".format(correct1 ,correct2, correct3))
+        
         res = []
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k1 = correct1[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k2 = correct2[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k3 = correct3[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k = 0.5 * correct_k1 + 0.25 * correct_k2 + 0.25 * correct_k3
             res.append(correct_k.mul_(100.0 / batch_size))
-        return res
-
+        return res    
+    
 
 def save_model(state, is_best, model_dir):
     logger.info("Saving the model.")

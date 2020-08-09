@@ -136,9 +136,9 @@ def reduce_tensor(tensor, args):
 def fast_collate(batch, memory_format=torch.channels_last):
     imgs = [img[0] for img in batch]
     targets = torch.tensor([target[1] for target in batch], dtype=torch.int64)
-    w = imgs[0].size[0]
-    h = imgs[0].size[1]
-    tensor = torch.zeros((len(imgs), 3, h, w), dtype=torch.uint8).contiguous(
+    w = imgs[0].shape[0]
+    h = imgs[0].shape[1]
+    tensor = torch.zeros((len(imgs), 3, w, h), dtype=torch.uint8).contiguous(
         memory_format=memory_format)
     for i, img in enumerate(imgs):
         nump_array = np.array(img, dtype=np.uint8)

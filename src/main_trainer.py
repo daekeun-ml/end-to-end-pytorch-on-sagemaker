@@ -7,6 +7,7 @@ import random
 import sys
 import time
 import warnings
+import glob
 from functools import partial
 
 import pandas as pd
@@ -203,7 +204,6 @@ def _get_images(args, data_type='train'):
     logger.info(args.data_dir)
     
     label_df = pd.read_csv(os.path.join(args.data_dir, 'train_folds.csv'))
-    #label_df = pd.read_csv(f'{train_dir}/train_folds.csv')
      
     trn_fold = [i for i in range(args.num_folds) if i not in [args.vld_fold_idx]]
     vld_fold = [args.vld_fold_idx]
@@ -211,9 +211,9 @@ def _get_images(args, data_type='train'):
     trn_idx = label_df.loc[label_df['fold'].isin(trn_fold)].index
     vld_idx = label_df.loc[label_df['fold'].isin(vld_fold)].index
 
-    logger.info("=== Getting Images ===")    
-    #files = sorted(glob2.glob(f'{train_dir}/{data_type}_*.parquet'))
-    files = [f'{args.data_dir}/{data_type}_image_data_{i}.parquet' for i in range(4)]
+    logger.info("=== Getting Images ===")
+    files = [file for file in glob.glob(os.path.join(args.data_dir,'*')) if file.split('.')[-1] == 'parquet']
+#     files = [f'{args.data_dir}/{data_type}_image_data_{i}.parquet' for i in range(4)]
     logger.info(files)
     
     image_df_list = [pd.read_parquet(f) for f in files]
@@ -224,6 +224,8 @@ def _get_images(args, data_type='train'):
     
     args.trn_df = label_df.loc[trn_idx]
     args.vld_df = label_df.loc[vld_idx]
+    
+
     
     return args 
 
@@ -254,7 +256,7 @@ def _get_train_data_loader(args, **kwargs):
                 RandomBrightnessContrast(),            
             ], p=0.3),
             HueSaturationValue(p=0.3),
-        ToTensor()
+#         ToTensor()
         ], p=1.0)
     
     dataset = BangaliDataset(imgs=args.imgs, label_df=args.trn_df, transform=train_transforms)
@@ -322,10 +324,11 @@ def train(current_gpu, args):
             len(train_loader),
             [batch_time, data_time, losses, top1, top5],
             prefix="Epoch: [{}]".format(epoch))
-
+        
+        trn_loss = []
         model.train()
         end = time.time()
-        
+        running_loss = 0.0
         ## Set epoch count for DistributedSampler
         if args.multigpus_distributed:
             train_sampler.set_epoch(epoch)
@@ -347,9 +350,9 @@ def train(current_gpu, args):
             util.adjust_learning_rate(optimizer, epoch, batch_idx, len(train_loader), args)
             
             ##### DATA Processing #####
-            targets_gra = targets[:, 0]
-            targets_vow = targets[:, 1]
-            targets_con = targets[:, 2]
+            targets_gra = target[:, 0]
+            targets_vow = target[:, 1]
+            targets_con = target[:, 2]
 
             # 50%의 확률로 원본 데이터 그대로 사용    
             if np.random.rand() < 0.5:
@@ -389,28 +392,17 @@ def train(current_gpu, args):
             running_loss += loss.item()
             
             #########################################################
-            
-            
-#             # compute output
-#             if args.prof >= 0: torch.cuda.nvtx.range_push("forward")
-#             output = model(input)
-#             if args.prof >= 0: torch.cuda.nvtx.range_pop()
-#             loss = criterion(output, target)
 
             # compute gradient and do SGD step
             optimizer.zero_grad()
             
-            if args.prof >= 0: torch.cuda.nvtx.range_push("backward")
             if args.apex:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
                 loss.backward()
-            if args.prof >= 0: torch.cuda.nvtx.range_pop()
 
-            if args.prof >= 0: torch.cuda.nvtx.range_push("optimizer.step()")
             optimizer.step()
-            if args.prof >= 0: torch.cuda.nvtx.range_pop()
             # Printing vital information
             if (batch_idx + 1) % (args.log_interval) == 0:
                 s = f'[Epoch {epoch} Batch {batch_idx+1}/{len(train_loader)}] ' \
@@ -419,70 +411,60 @@ def train(current_gpu, args):
                 running_loss = 0
                 
                 
-#             if True or batch_idx % args.log_interval == 0:
-#                 # Every print_freq iterations, check the loss, accuracy, and speed.
-#                 # For best performance, it doesn't make sense to print these metrics every
-#                 # iteration, since they incur an allreduce and some host<->device syncs.
+            if True or batch_idx % args.log_interval == 0:
+                # Every log_interval iterations, check the loss, accuracy, and speed.
+                # For best performance, it doesn't make sense to print these metrics every
+                # iteration, since they incur an allreduce and some host<->device syncs.
 
-#                 # Measure accuracy
-#                 prec1, prec5 = util.accuracy(output.data, target, topk=(1, 5))
+                # Measure accuracy
+                prec1, prec5 = util.accuracy(logits, target, topk=(1, 5))
 
-#                 # Average loss and accuracy across processes for logging
-#                 if args.multigpus_distributed:
-#                     reduced_loss = dis_util.reduce_tensor(loss.data, args)
-#                     prec1 = dis_util.reduce_tensor(prec1, args)
-#                     prec5 = dis_util.reduce_tensor(prec5, args)
-#                 else:
-#                     reduced_loss = loss.data
-
-#                 # to_python_float incurs a host<->device sync
-#                 losses.update(to_python_float(reduced_loss), input.size(0))
-#                 top1.update(to_python_float(prec1), input.size(0))
-#                 top5.update(to_python_float(prec5), input.size(0))
+                # Average loss and accuracy across processes for logging
+                if args.multigpus_distributed:
+                    reduced_loss = dis_util.reduce_tensor(loss.data, args)
+                    prec1 = dis_util.reduce_tensor(prec1, args)
+                    prec5 = dis_util.reduce_tensor(prec5, args)
+                else:
+                    reduced_loss = loss.data
                 
-#                 ## Waiting until finishing operations on GPU (Pytorch default: async)
-#                 torch.cuda.synchronize()
-#                 batch_time.update((time.time() - end)/args.log_interval)
-#                 end = time.time()
+                # to_python_float incurs a host<->device sync
+                losses.update(to_python_float(reduced_loss), input.size(0))
+                top1.update(to_python_float(prec1), input.size(0))
+                top5.update(to_python_float(prec5), input.size(0))
+                
+                ## Waiting until finishing operations on GPU (Pytorch default: async)
+                torch.cuda.synchronize()
+                batch_time.update((time.time() - end)/args.log_interval)
+                end = time.time()
 
-#                 if current_gpu == 0:
-#                     print('Epoch: [{0}][{1}/{2}]  '
-#                           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
-#                           'Speed {3:.3f} ({4:.3f})  '
-#                           'Loss {loss.val:.10f} ({loss.avg:.4f})  '
-#                           'Prec@1 {top1.val:.3f} ({top1.avg:.3f})  '
-#                           'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-#                               epoch, batch_idx, len(train_loader),
-#                               args.world_size*args.batch_size/batch_time.val,
-#                               args.world_size*args.batch_size/batch_time.avg,
-#                               batch_time=batch_time,
-#                               loss=losses, top1=top1, top5=top5))
-#                     model_history['epoch'].append(epoch)
-#                     model_history['batch_idx'].append(batch_idx)
-#                     model_history['batch_time'].append(batch_time.val)
-#                     model_history['losses'].append(losses.val)
-#                     model_history['top1'].append(top1.val)
-#                     model_history['top5'].append(top5.val)
-                    
-#                 if args.prof >= 0: torch.cuda.nvtx.range_push("prefetcher.next()")
-#                 input, target = prefetcher.next()
-#                 if args.prof >= 0: torch.cuda.nvtx.range_pop()
-
-#                 # Pop range "Body of iteration {}".format(i)
-#                 if args.prof >= 0: torch.cuda.nvtx.range_pop()
+                if current_gpu == 0:
+                    print('Epoch: [{0}][{1}/{2}]  '
+                          'Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                          'Speed {3:.3f} ({4:.3f})  '
+                          'Loss {loss.val:.10f} ({loss.avg:.4f})  '
+                          'Prec@1 {top1.val:.3f} ({top1.avg:.3f})  '
+                          'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                              epoch, batch_idx, len(train_loader),
+                              args.world_size*args.batch_size/batch_time.val,
+                              args.world_size*args.batch_size/batch_time.avg,
+                              batch_time=batch_time,
+                              loss=losses, top1=top1, top5=top5))
+                    model_history['epoch'].append(epoch)
+                    model_history['batch_idx'].append(batch_idx)
+                    model_history['batch_time'].append(batch_time.val)
+                    model_history['losses'].append(losses.val)
+                    model_history['top1'].append(top1.val)
+                    model_history['top5'].append(top5.val)
                     
 
-#                 if args.prof >= 0 and batch_idx == args.prof + 10:
-#                     print("Profiling ended at iteration {}".format(batch_idx))
-#                     torch.cuda.cudart().cudaProfilerStop()
-#                     quit()
-               
-        acc1 = validate(test_loader, model, loss_fn, epoch, model_history, args)
-        
-        print(" ****  acc1 :{}".format(acc1))
+            input, target = prefetcher.next()
+            
+        acc1 = validate(test_loader, model, loss_fn, epoch, model_history, trn_loss, args)            
+
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
+
 
         if not args.multigpus_distributed or (args.multigpus_distributed and args.rank % args.num_gpus == 0):
             util.save_history(os.path.join(args.output_data_dir,
@@ -494,11 +476,11 @@ def train(current_gpu, args):
                 'state_dict': model.state_dict(),
                 'best_acc1': best_acc1,
                 'optimizer': optimizer.state_dict(),
-                'class_to_idx' : train_loader.dataset.class_to_idx,
+#                 'class_to_idx' : train_loader.dataset.class_to_idx,
             }, is_best, args.model_dir)
 
 
-def validate(val_loader, model, loss_fn, epoch, model_history, args):
+def validate(val_loader, model, loss_fn, epoch, model_history, trn_loss, args):
     batch_time = util.AverageMeter('Time', ':6.3f')
     losses = util.AverageMeter('Loss', ':.4e')
     top1 = util.AverageMeter('Acc@1', ':6.2f')
@@ -507,13 +489,9 @@ def validate(val_loader, model, loss_fn, epoch, model_history, args):
         len(val_loader),
         [batch_time, losses, top1, top5],
         prefix='Test: ')
-
-    
     val_loss = []
     val_true = []
-    val_pred = []    
-    
-    
+    val_pred = []
     
     # switch to evaluate mode
     model.eval()
@@ -527,127 +505,97 @@ def validate(val_loader, model, loss_fn, epoch, model_history, args):
     
         # compute output
         with torch.no_grad():
-#             data = data.contiguous(memory_format=args.memory_format)
-#             target = target.contiguous()
-#             data = data.cuda(non_blocking=True)
-#             target = target.cuda(non_blocking=True)
-
-
-
                 logits = model(input)
                 grapheme = logits[:,:168]
                 vowel = logits[:, 168:179]
                 cons = logits[:, 179:]
 
-                loss= 0.5* loss_fn(grapheme, targets[:,0]) + 0.25*loss_fn(vowel, targets[:,1]) + \
-                0.25*loss_fn(vowel, targets[:,2])
+                loss= 0.5* loss_fn(grapheme, target[:,0]) + 0.25*loss_fn(vowel, target[:,1]) + \
+                0.25*loss_fn(vowel, target[:,2])
                 val_loss.append(loss.item())
 
                 grapheme = grapheme.cpu().argmax(dim=1).data.numpy()
                 vowel = vowel.cpu().argmax(dim=1).data.numpy()
                 cons = cons.cpu().argmax(dim=1).data.numpy()
 
-                val_true.append(targets.cpu().numpy())
+                val_true.append(target.cpu().numpy())
                 val_pred.append(np.stack([grapheme, vowel, cons], axis=1))                
+  
+                
+        # measure accuracy and record loss
+        prec1, prec5 = util.accuracy(logits, target, topk=(1, 5))
 
-        val_true = np.concatenate(val_true)
-        val_pred = np.concatenate(val_pred)
-        val_loss = np.mean(val_loss)
-        trn_loss = np.mean(trn_loss)
+        if args.multigpus_distributed:
+            reduced_loss = dis_util.reduce_tensor(loss.data, args)
+            prec1 = dis_util.reduce_tensor(prec1, args)
+            prec5 = dis_util.reduce_tensor(prec5, args)
+        else:
+            reduced_loss = loss.data
 
-        score_g = recall_score(val_true[:,0], val_pred[:,0], average='macro')
-        score_v = recall_score(val_true[:,1], val_pred[:,1], average='macro')
-        score_c = recall_score(val_true[:,2], val_pred[:,2], average='macro')
-        final_score = np.average([score_g, score_v, score_c], weights=[2,1,1])
-
-        # Printing vital information
-        s = f'[Epoch {epoch}] ' \
-        f'trn_loss: {trn_loss:.4f}, vld_loss: {val_loss:.4f}, score: {final_score:.4f}, ' \
-        f'score_each: [{score_g:.4f}, {score_v:.4f}, {score_c:.4f}]'          
-        print(s)
-
-        ################################################################################
-        # ==> Save checkpoint and training stats
-        ################################################################################        
-        if final_score > best_score:
-            best_score = final_score
-            state_dict = model.cpu().state_dict()
-            model = model.cuda()
-            torch.save(state_dict, os.path.join(args.model_output_dir, 'model.pt'))
-
-        # Record all statistics from this epoch
-        training_stats.append(
-            {
-                'epoch': epoch + 1,
-                'trn_loss': trn_loss,
-                'trn_time': trn_time,            
-                'val_loss': val_loss,
-                'score': final_score,
-                'score_g': score_g,
-                'score_v': score_v,
-                'score_c': score_c            
-            }
-        )      
-        
-        # === Save Model Parameters ===
-        logger.info("Model successfully saved at: {}".format(args.model_output_dir))      
-        
-        
-#         # measure accuracy and record loss
-#         prec1, prec5 = util.accuracy(output.data, target, topk=(1, 5))
-
-#         if args.multigpus_distributed:
-#             reduced_loss = dis_util.reduce_tensor(loss.data, args)
-#             prec1 = dis_util.reduce_tensor(prec1, args)
-#             prec5 = dis_util.reduce_tensor(prec5, args)
-#         else:
-#             reduced_loss = loss.data
-
-#         losses.update(to_python_float(reduced_loss), input.size(0))
-#         top1.update(to_python_float(prec1), input.size(0))
-#         top5.update(to_python_float(prec5), input.size(0))
+        losses.update(to_python_float(reduced_loss), input.size(0))
+        top1.update(to_python_float(prec1), input.size(0))
+        top5.update(to_python_float(prec5), input.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-#         # TODO:  Change timings to mirror train().
-#         if args.current_gpu == 0 and batch_idx % args.log_interval == 0:
-#             print('Test: [{0}/{1}]  '
-#                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
-#                   'Speed {2:.3f} ({3:.3f})  '
-#                   'Loss {loss.val:.4f} ({loss.avg:.4f})  '
-#                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})  '
-#                   'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-#                       batch_idx, len(val_loader),
-#                       args.world_size * args.batch_size / batch_time.val,
-#                       args.world_size * args.batch_size / batch_time.avg,
-#                       batch_time=batch_time, loss=losses,
-#                       top1=top1, top5=top5))
-#             model_history['val_epoch'].append(epoch)
-#             model_history['val_batch_idx'].append(batch_idx)
-#             model_history['val_batch_time'].append(batch_time.val)
-#             model_history['val_losses'].append(losses.val)
-#             model_history['val_top1'].append(top1.val)
-#             model_history['val_top5'].append(top5.val)
-#         input, target = prefetcher.next()
-
-#     print('  Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-#           .format(top1=top1, top5=top5))
-#     model_history['val_avg_epoch'].append(epoch)
-#     model_history['val_avg_batch_time'].append(batch_time.avg)
-#     model_history['val_avg_losses'].append(losses.avg)
-#     model_history['val_avg_top1'].append(top1.avg)
-#     model_history['val_avg_top5'].append(top5.avg)
-#     return top1.avg
+        # TODO:  Change timings to mirror train().
+        if args.current_gpu == 0 and batch_idx % args.log_interval == 0:
+            print('Test: [{0}/{1}]  '
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                  'Speed {2:.3f} ({3:.3f})  '
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})  '
+                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})  '
+                  'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                      batch_idx, len(val_loader),
+                      args.world_size * args.batch_size / batch_time.val,
+                      args.world_size * args.batch_size / batch_time.avg,
+                      batch_time=batch_time, loss=losses,
+                      top1=top1, top5=top5))
+            model_history['val_epoch'].append(epoch)
+            model_history['val_batch_idx'].append(batch_idx)
+            model_history['val_batch_time'].append(batch_time.val)
+            model_history['val_losses'].append(losses.val)
+            model_history['val_top1'].append(top1.val)
+            model_history['val_top5'].append(top5.val)
+        input, target = prefetcher.next()
 
 
+        
+    val_true_concat = np.concatenate(val_true)
+    val_pred_concat = np.concatenate(val_pred)
+    val_loss_mean = np.mean(val_loss)
+    trn_loss_mean = np.mean(trn_loss)
+
+    score_g = recall_score(val_true_concat[:,0], val_pred_concat[:,0], average='macro')
+    score_v = recall_score(val_true_concat[:,1], val_pred_concat[:,1], average='macro')
+    score_c = recall_score(val_true_concat[:,2], val_pred_concat[:,2], average='macro')
+    final_score = np.average([score_g, score_v, score_c], weights=[2,1,1])
+
+    if args.current_gpu == 0:
+        # Printing vital information
+        s = f'[Epoch {epoch}] ' \
+        f'trn_loss: {trn_loss_mean:.4f}, vld_loss: {val_loss_mean:.4f}, score: {final_score:.4f}, ' \
+        f'score_each: [{score_g:.4f}, {score_v:.4f}, {score_c:.4f}]'          
+        print(s)  
+        
+        
+    print('  Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'.format(top1=top1, top5=top5))
+    model_history['val_avg_epoch'].append(epoch)
+    model_history['val_avg_batch_time'].append(batch_time.avg)
+    model_history['val_avg_losses'].append(losses.avg)
+    model_history['val_avg_top1'].append(top1.avg)
+    model_history['val_avg_top5'].append(top5.avg)
+    return top1.avg
+
+## iter() overflowerror: cannot serialize a bytes object larger than 4 gib --> num_worker=0 resolved
 def main():
     args = parser_args()
     args.use_cuda = args.num_gpus > 0
     print("args.use_cuda : {} , args.num_gpus : {}".format(
         args.use_cuda, args.num_gpus))
-    args.kwargs = {'num_workers': 4,
+    args.kwargs = {'num_workers': 0,
                    'pin_memory': True} if args.use_cuda else {}
     args.device = torch.device("cuda" if args.use_cuda else "cpu")
     dis_util.dist_init(train, args)
