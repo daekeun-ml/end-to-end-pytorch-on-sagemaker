@@ -1,3 +1,4 @@
+
 import argparse
 import pandas as pd
 import numpy as np
@@ -79,11 +80,10 @@ def _get_images(train_dir, num_folds=5, vld_fold_idx=4, data_type='train'):
     vld_idx = label_df.loc[label_df['fold'].isin(vld_fold)].index
 
     logger.info("=== Getting Images ===")    
-    #files = sorted(glob2.glob(f'{train_dir}/{data_type}_*.parquet'))
-    files = [f'{train_dir}/{data_type}_image_data_{i}.parquet' for i in range(4)]
+    files = [f'{train_dir}/{data_type}_image_data_{i}.feather' for i in range(4)]
     logger.info(files)
     
-    image_df_list = [pd.read_parquet(f) for f in files]
+    image_df_list = [pd.read_feather(f) for f in files]
     imgs = [df.iloc[:, 1:].values.reshape(-1, HEIGHT, WIDTH) for df in image_df_list]
     del image_df_list
     gc.collect()
