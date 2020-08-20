@@ -30,14 +30,16 @@
 
 ## Implementation (To be updated soon)
 
-### [Module 1. EDA and Data Preparation](module1-eda_and_data_split.ipynb)
+### [Module 1. EDA and Data Preparation](1.eda_and_data_split.ipynb)
 
-### [Module 2. Training without Amazon SageMaker](module2-training_local.ipynb)
+### [Module 2. Training without Amazon SageMaker](2.training_local.ipynb)
 
-### [Module 3. Training on Amazon SageMaker](module3-training_on_sagemaker.ipynb)
+### [Module 3. Training on Amazon SageMaker](3.training_on_sagemaker.ipynb)
 
-### Module 4. Multi-GPU Distributed Training on Amazon SageMaker
+### [Module 4. Multi-GPU Distributed Training on Amazon SageMaker](4.distributed_training_on_sagemaker.ipynb)
 
-### Module 5. Deployment
+### [Module 5. Deployment on MMS(Multi Model Server)](5.deployment_on_mms.ipynb)
 
-### Module 6. MLOps-Step Function Pipeline
+### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_on_mms-eia.ipynb)
+
+### Module 7. MLOps-Step Function Pipeline
