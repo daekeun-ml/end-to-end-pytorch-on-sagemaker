@@ -15,15 +15,15 @@
 - Preprocessing
     - parquet → direct training data input에 대한 research (daekeun@)
 - Training
-    - 기본 학습 코드 작성 (daekeun@)
+    - 기본 학습 코드 작성, CutMix 적용 (daekeun@)
     - SageMaker BYOS + apex 기반 분산 학습 코드 작성 (choijoon@)
-    - Optional: Self-Supervised Learning, CutMix 적용
+    - Optional: Self-Supervised Learning
 - Deployment
+    - MMS, Elastic Inference (daekeun@)
     - torchserving (daekeun@, choijoon@)
-    - eia (choijoon@)
     - MLOps (wonkec@)
 
-### Contributor
+### Contributors
 - Daekeun Kim (daekeun@amazon.com)
 - Youngjoon Choi (choijoon@amazon.com)
 - Wonkeun Choi (wonkec@amazon.com)
