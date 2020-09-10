@@ -43,3 +43,7 @@
 ### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_on_mms-eia.ipynb)
 
 ### Module 7. MLOps-Step Function Pipeline
+
+<br>
+
+[Privacy](https://aws.amazon.com/privacy/) | [Site terms](https://aws.amazon.com/terms/) | © 2020, Amazon Web Services, Inc. or its affiliates. All rights reserved.
