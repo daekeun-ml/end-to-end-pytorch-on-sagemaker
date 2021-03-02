@@ -1,4 +1,4 @@
-# Building an end-to-end ML demo based on the PyTorch framework on Amazon SageMaker
+# Building an end-to-end ML Image Classification demo based on the PyTorch framework on Amazon SageMaker
 
 ## Introduction
 
@@ -20,15 +20,14 @@
     - Optional: Self-Supervised Learning
 - Deployment
     - MMS, Elastic Inference (daekeun@)
-    - torchserving (daekeun@, choijoon@)
+    - torchserving (daekeun@)
     - MLOps (wonkec@)
 
 ### Contributors
 - Daekeun Kim (daekeun@amazon.com)
 - Youngjoon Choi (choijoon@amazon.com)
-- Wonkeun Choi (wonkec@amazon.com)
 
-## Implementation (To be updated soon)
+## Implementation
 
 ### [Module 1. EDA and Data Preparation](1.eda_and_data_split.ipynb)
 
@@ -36,14 +35,15 @@
 
 ### [Module 3. Training on Amazon SageMaker](3.training_on_sagemaker.ipynb)
 
+### [Module 3b. (Optional)Training on Amazon SageMaker using SageMaker Data Parallelism Library](3.(optional) training_on_sagemaker_smdataparallel.ipynb)
+
 ### [Module 4. Multi-GPU Distributed Training on Amazon SageMaker](4.distributed_training_on_sagemaker.ipynb)
 
 ### [Module 5. Deployment on MMS(Multi Model Server)](5.deployment_on_mms.ipynb)
 
 ### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_on_mms-eia.ipynb)
 
-### Module 7. MLOps-Step Function Pipeline
-
+### Module 7. MLOps-Step Function Pipeline (To be updated soon)
 <br>
 
-[Privacy](https://aws.amazon.com/privacy/) | [Site terms](https://aws.amazon.com/terms/) | © 2020, Amazon Web Services, Inc. or its affiliates. All rights reserved.
+[Privacy](https://aws.amazon.com/privacy/) | [Site terms](https://aws.amazon.com/terms/) | © 2021, Amazon Web Services, Inc. or its affiliates. All rights reserved.

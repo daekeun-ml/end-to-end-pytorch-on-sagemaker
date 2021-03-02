@@ -20,6 +20,13 @@ import logging.handlers
 import matplotlib.pyplot as plt
 import joblib
 
+
+# Import SMDataParallel PyTorch Modules
+from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
+import smdistributed.dataparallel.torch.distributed as dist
+dist.init_process_group()
+
+
 HEIGHT = 137
 WIDTH = 236
 BATCH_SIZE = 256
@@ -141,10 +148,23 @@ def _get_data_loader(imgs, trn_df, vld_df):
     from torch.utils.data import Dataset, DataLoader
     trn_dataset = BangaliDataset(imgs=imgs, label_df=trn_df, transform=train_transforms)
     vld_dataset = BangaliDataset(imgs=imgs, label_df=vld_df, transform=valid_transforms)
-
-    trn_loader = DataLoader(trn_dataset, shuffle=True, num_workers=NUM_WORKERS, batch_size=BATCH_SIZE)
-    vld_loader = DataLoader(vld_dataset, shuffle=False, num_workers=NUM_WORKERS, batch_size=BATCH_SIZE)
     
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    
+    trn_sampler = torch.utils.data.distributed.DistributedSampler(
+        trn_dataset, 
+        num_replicas=world_size, # worldsize만큼 분할
+        rank=rank)
+    
+    trn_loader = DataLoader(trn_dataset, 
+                            shuffle=False, 
+                            num_workers=8,
+                            pin_memory=True,
+                            batch_size=BATCH_SIZE,
+                           sampler=trn_sampler)  
+    
+    vld_loader = DataLoader(vld_dataset, shuffle=False, num_workers=NUM_WORKERS, batch_size=BATCH_SIZE)  
     return trn_loader, vld_loader
 
 
@@ -183,21 +203,32 @@ def _format_time(elapsed):
     
     # Format as hh:mm:ss
     return str(datetime.timedelta(seconds=elapsed_rounded))
-
-
+            
 def train_model(args):
-    #num_epochs, num_folds, vld_fold_idx, batch_size, lr, log_interval, train_dir, model_dir):
     from torchvision import datasets, models
     from tqdm import tqdm
-   
+    
     imgs, trn_df, vld_df = _get_images(args.train_dir, args.num_folds, args.vld_fold_idx, data_type='train')
     trn_loader, vld_loader = _get_data_loader(imgs, trn_df, vld_df)
 
+    
     logger.info("=== Getting Pre-trained model ===")    
     model = models.resnet18(pretrained=True)
     last_hidden_units = model.fc.in_features
     model.fc = torch.nn.Linear(last_hidden_units, 186)
-    model = model.cuda()
+#     len_buffer =  len(list(module.buffers()))
+
+#     logger.info("=== Buffer ===")    
+#     print(f"len_buffer={len_buffer}")
+#     print(list(model.buffers()))
+    
+    # SDP: Pin each GPU to a single process
+    # Use SMDataParallel PyTorch DDP for efficient distributed training
+    model = DDP(model.to(args.device), broadcast_buffers=False)
+
+    # SDP: Pin each GPU to a single SDP process.
+    torch.cuda.set_device(args.local_rank)
+    model.cuda(args.local_rank)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
@@ -279,81 +310,84 @@ def train_model(args):
         # Measure how long this epoch took.
         trn_time = _format_time(time.time() - t0)        
 
-        ################################################################################
-        # ==> Validation phase
-        ################################################################################
-        val_loss = []
-        val_true = []
-        val_pred = []
-        model.eval()
-        
-        # === Validation phase ===
-        logger.info('=== Start Validation ===')        
 
-        with torch.no_grad():
-            for inputs, targets in vld_loader:
-                inputs = inputs.cuda()
-                targets = targets.cuda()
-                logits = model(inputs)
-                grapheme = logits[:,:168]
-                vowel = logits[:, 168:179]
-                cons = logits[:, 179:]
+        if args.rank == 0:    
+            ################################################################################
+            # ==> Validation phase
+            ################################################################################
+            val_loss = []
+            val_true = []
+            val_pred = []
+            model.eval()
 
-                loss= 0.5* loss_fn(grapheme, targets[:,0]) + 0.25*loss_fn(vowel, targets[:,1]) + \
-                0.25*loss_fn(vowel, targets[:,2])
-                val_loss.append(loss.item())
+            # === Validation phase ===
+            logger.info('=== Start Validation ===')        
 
-                grapheme = grapheme.cpu().argmax(dim=1).data.numpy()
-                vowel = vowel.cpu().argmax(dim=1).data.numpy()
-                cons = cons.cpu().argmax(dim=1).data.numpy()
+            with torch.no_grad():
+                for inputs, targets in vld_loader:
+                    inputs = inputs.cuda()
+                    targets = targets.cuda()
+                    logits = model(inputs)
+                    grapheme = logits[:,:168]
+                    vowel = logits[:, 168:179]
+                    cons = logits[:, 179:]
 
-                val_true.append(targets.cpu().numpy())
-                val_pred.append(np.stack([grapheme, vowel, cons], axis=1))                
+                    loss= 0.5* loss_fn(grapheme, targets[:,0]) + 0.25*loss_fn(vowel, targets[:,1]) + \
+                    0.25*loss_fn(vowel, targets[:,2])
+                    val_loss.append(loss.item())
 
-        val_true = np.concatenate(val_true)
-        val_pred = np.concatenate(val_pred)
-        val_loss = np.mean(val_loss)
-        trn_loss = np.mean(trn_loss)
+                    grapheme = grapheme.cpu().argmax(dim=1).data.numpy()
+                    vowel = vowel.cpu().argmax(dim=1).data.numpy()
+                    cons = cons.cpu().argmax(dim=1).data.numpy()
 
-        score_g = recall_score(val_true[:,0], val_pred[:,0], average='macro')
-        score_v = recall_score(val_true[:,1], val_pred[:,1], average='macro')
-        score_c = recall_score(val_true[:,2], val_pred[:,2], average='macro')
-        final_score = np.average([score_g, score_v, score_c], weights=[2,1,1])
+                    val_true.append(targets.cpu().numpy())
+                    val_pred.append(np.stack([grapheme, vowel, cons], axis=1))                
 
-        # Printing vital information
-        s = f'[Epoch {epoch_id}] ' \
-        f'trn_loss: {trn_loss:.4f}, vld_loss: {val_loss:.4f}, score: {final_score:.4f}, ' \
-        f'score_each: [{score_g:.4f}, {score_v:.4f}, {score_c:.4f}]'          
-        print(s)
+            val_true = np.concatenate(val_true)
+            val_pred = np.concatenate(val_pred)
+            val_loss = np.mean(val_loss)
+            trn_loss = np.mean(trn_loss)
 
-        ################################################################################
-        # ==> Save checkpoint and training stats
-        ################################################################################        
-        if final_score > best_score:
-            best_score = final_score
-            state_dict = model.cpu().state_dict()
-            model = model.cuda()
-            torch.save(state_dict, os.path.join(args.model_dir, 'model.pt'))
+            score_g = recall_score(val_true[:,0], val_pred[:,0], average='macro')
+            score_v = recall_score(val_true[:,1], val_pred[:,1], average='macro')
+            score_c = recall_score(val_true[:,2], val_pred[:,2], average='macro')
+            final_score = np.average([score_g, score_v, score_c], weights=[2,1,1])
 
-        # Record all statistics from this epoch
-        training_stats.append(
-            {
-                'epoch': epoch_id + 1,
-                'trn_loss': trn_loss,
-                'trn_time': trn_time,            
-                'val_loss': val_loss,
-                'score': final_score,
-                'score_g': score_g,
-                'score_v': score_v,
-                'score_c': score_c            
-            }
-        )      
-        
-        # === Save Model Parameters ===
-        logger.info("Model successfully saved at: {}".format(args.model_dir))            
+            # Printing vital information
+            s = f'[Epoch {epoch_id}] ' \
+            f'trn_loss: {trn_loss:.4f}, vld_loss: {val_loss:.4f}, score: {final_score:.4f}, ' \
+            f'score_each: [{score_g:.4f}, {score_v:.4f}, {score_c:.4f}]'          
+            print(s)
+
+            ################################################################################
+            # ==> Save checkpoint and training stats
+            ################################################################################        
+            if final_score > best_score:
+                best_score = final_score
+                state_dict = model.cpu().state_dict()
+                model = model.cuda()
+                torch.save(state_dict, os.path.join(args.model_dir, 'model.pt'))
+
+            # Record all statistics from this epoch
+            training_stats.append(
+                {
+                    'epoch': epoch_id + 1,
+                    'trn_loss': trn_loss,
+                    'trn_time': trn_time,            
+                    'val_loss': val_loss,
+                    'score': final_score,
+                    'score_g': score_g,
+                    'score_v': score_v,
+                    'score_c': score_c            
+                }
+            )      
+
+            # === Save Model Parameters ===
+            logger.info("Model successfully saved at: {}".format(args.model_dir))            
 
         
 def parser_args():
+    
     parser = argparse.ArgumentParser()
 
     # Hyperparameters sent by the client are passed as command-line arguments to the script.
@@ -362,13 +396,14 @@ def parser_args():
     parser.add_argument('--vld_fold_idx', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--log_interval', type=int, default=10) 
 
-    # SageMaker Container environment
+    # SageMaker Container environment    
     parser.add_argument('--train_dir', type=str, default=os.environ['SM_CHANNEL_TRAINING'])
+    parser.add_argument('--model_dir', type=str, default=os.environ['SM_MODEL_DIR'])    
     parser.add_argument('--num_gpus', type=int, default=os.environ['SM_NUM_GPUS'])
-    parser.add_argument('--model_dir', type=str, default=os.environ['SM_MODEL_DIR'])
-    #parser.add_argument('--model_output_dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR'))
+ 
     args = parser.parse_args() 
     return args
         
@@ -377,8 +412,18 @@ if __name__ =='__main__':
 
     #parse arguments
     args = parser_args() 
+    
+    args.world_size = dist.get_world_size()
+    args.rank = dist.get_rank()
+    args.local_rank = dist.get_local_rank()
+    #print(f"rank={args.rank}, local_rank={args.local_rank}")
+    args.batch_size //= args.world_size // 8
+    args.batch_size = max(args.batch_size, 1)
+    
     args.use_cuda = args.num_gpus > 0
     print("args.use_cuda : {} , args.num_gpus : {}".format(
         args.use_cuda, args.num_gpus))
     args.device = torch.device("cuda" if args.use_cuda else "cpu")
+
     train_model(args)
+    
