@@ -35,7 +35,7 @@
 
 ### [Module 3. Training on Amazon SageMaker](3.training_on_sagemaker.ipynb)
 
-### [Module 3b. (Optional)Training on Amazon SageMaker using SageMaker Data Parallelism Library](3.(optional) training_on_sagemaker_smdataparallel.ipynb)
+### [Module 3b. (Optional) Training on Amazon SageMaker using SageMaker Data Parallelism Library](3b.training_on_sagemaker_smdataparallel.ipynb)
 
 ### [Module 4. Multi-GPU Distributed Training on Amazon SageMaker](4.distributed_training_on_sagemaker.ipynb)
 
