@@ -41,6 +41,32 @@
 ### [Module 5. Deployment on MMS(Multi Model Server)](5.deployment.ipynb)
 
 ### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_eia.ipynb)
+
+
+## CloudFormation
+본 핸즈온랩에 필요한 AWS 리소스를 생성하기 위해 CloudFormation 스택이 제공됩니다. 아래 링크를 선택하면 스택이 시작될 AWS 콘솔의 CloudFormation 으로 자동 redirection 됩니다.
+
+- [Launch CloudFormation stack in ap-northeast-2 (Seoul)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-2#/stacks/create/review?stackName=AIMLWorkshop&templateURL=https://daekeun-workshop-public-material.s3.ap-northeast-2.amazonaws.com/cloudformation/sagemaker-imd.yaml)
+- [Launch CloudFormation stack in us-east-1 (N. Virginia)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=AIMLWorkshop&templateURL=https://daekeun-workshop-public-material.s3.ap-northeast-2.amazonaws.com/cloudformation/sagemaker-imd.yaml)
+- [Launch CloudFormation stack in us-east-2 (Ohio)](https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?stackName=AIMLWorkshop&templateURL=https://daekeun-workshop-public-material.s3.ap-northeast-2.amazonaws.com/cloudformation/sagemaker-imd.yaml)
+- [Launch CloudFormation stack in us-west-1 (N. California)](https://console.aws.amazon.com/cloudformation/home?region=us-west-1#/stacks/create/review?stackName=AIMLWorkshop&templateURL=https://daekeun-workshop-public-material.s3.ap-northeast-2.amazonaws.com/cloudformation/sagemaker-imd.yaml)
+- [Launch CloudFormation stack in us-west-2 (Oregon)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=AIMLWorkshop&templateURL=https://daekeun-workshop-public-material.s3.ap-northeast-2.amazonaws.com/cloudformation/sagemaker-imd.yaml)
+
+CloudFormation 스택은 아래 리소스를 자동으로 생성합니다.
+
+- EC2 및 SageMaker 인스턴스에 퍼블릭 서브넷 + 보안 그룹이 있는 VPC
+- AWS 리소스에 액세스하는 데 필요한 IAM role
+- Jupyter 노트북에서 모델을 정의하는 SageMaker 노트북 인스턴스. 모델 자체는 SageMaker 서비스를 사용하여 학습됩니다.
+- SageMaker에 필요한 S3 버킷
+
+AWS CloudFormation 콘솔의 Quick create stack 페이지로 이동 후 다음 단계를 수행하여 스택을 시작합니다.
+
+- DefaultCodeRepository: 발표자가 안내하는 GitHub 리포지토리 주소를 지정합니다. 
+(예: https://github.com/daekeun-ml/end-to-end-pytorch-on-sagemaker)
+- MLInstanceType: SageMaker notebook instance type을 선택합니다. 미리 설정된 **`ml.m4.xlarge`** 나 **`ml.t2.medium`** 인스턴스를 권장합니다. 
+- Capabilities: **`I acknowledge that AWS CloudFormation might create IAM resources`** 을 체크합니다.
+- 우측 하단의 **`Create stack`** 버튼을 누르고, 스택 생성이 완료될 때까지 기다립니다. 약 10분이 소요됩니다
+
 <br>
 
 [Privacy](https://aws.amazon.com/privacy/) | [Site terms](https://aws.amazon.com/terms/) | © 2021, Amazon Web Services, Inc. or its affiliates. All rights reserved.
