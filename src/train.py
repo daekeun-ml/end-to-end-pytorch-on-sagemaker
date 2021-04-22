@@ -333,7 +333,7 @@ def train_model(args):
             best_score = final_score
             state_dict = model.cpu().state_dict()
             model = model.cuda()
-            torch.save(state_dict, os.path.join(args.model_dir, 'model.pt'))
+            torch.save(state_dict, os.path.join(args.model_dir, 'model.pth'))
 
         # Record all statistics from this epoch
         training_stats.append(

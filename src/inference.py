@@ -12,9 +12,6 @@ from os.path import join
 import numpy as np
 import io
 import tarfile
-
-import boto3
-
 from PIL import Image
 
 import torch
@@ -42,7 +39,7 @@ def model_fn(model_dir):
     model = models.resnet18(pretrained=True)
     last_hidden_units = model.fc.in_features
     model.fc = torch.nn.Linear(last_hidden_units, 186)
-    model.load_state_dict(torch.load(os.path.join(model_dir, './model.pt')))
+    model.load_state_dict(torch.load(os.path.join(model_dir, 'model.pth')))
     return model
 
 # Deserialize the request body

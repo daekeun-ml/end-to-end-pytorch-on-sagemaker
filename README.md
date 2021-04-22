@@ -21,7 +21,6 @@
 - Deployment
     - MMS, Elastic Inference (daekeun@)
     - torchserving (daekeun@)
-    - MLOps (wonkec@)
 
 ### Contributors
 - Daekeun Kim (daekeun@amazon.com)
@@ -39,11 +38,9 @@
 
 ### [Module 4. Multi-GPU Distributed Training on Amazon SageMaker](4.distributed_training_on_sagemaker.ipynb)
 
-### [Module 5. Deployment on MMS(Multi Model Server)](5.deployment_on_mms.ipynb)
+### [Module 5. Deployment on MMS(Multi Model Server)](5.deployment.ipynb)
 
-### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_on_mms-eia.ipynb)
-
-### Module 7. MLOps-Step Function Pipeline (To be updated soon)
+### [Module 6. Deployment for EIA(Elastic Inference Accelerator)](6.deployment_eia.ipynb)
 <br>
 
 [Privacy](https://aws.amazon.com/privacy/) | [Site terms](https://aws.amazon.com/terms/) | © 2021, Amazon Web Services, Inc. or its affiliates. All rights reserved.
