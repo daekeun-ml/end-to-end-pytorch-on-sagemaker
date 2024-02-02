@@ -1,4 +1,4 @@
-torch==1.6.0
+torch==1.13.1
 fastai==2.0.0
 albumentations==0.5.2
 nvidia-ml-py3==7.352.0
